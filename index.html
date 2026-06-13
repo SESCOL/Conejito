@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Conejito Saltarín</title>
+<title>Regis Play</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -76,6 +76,16 @@
     transform: scale(1.3);
   }
 
+  #titleBox {
+    text-align: center;
+  }
+  #gameTitle {
+    font-size: 28px;
+    font-weight: 900;
+    color: #e63946;
+    text-shadow: 2px 2px 0 #fff, 3px 3px 0 rgba(0,0,0,0.12);
+    letter-spacing: 1px;
+  }
   #scoreBox {
     text-align: center;
   }
@@ -163,11 +173,16 @@
     <span id="targetLabel">¡Salta con la letra!</span>
     <div id="targetLetter">A</div>
   </div>
-  <div id="scoreBox">
-    <div id="scoreLabel">Puntos</div>
-    <div id="score">0</div>
+  <div id="titleBox">
+    <div id="gameTitle">🐰 Regis Play</div>
   </div>
-  <div id="livesBox">🐰🐰🐰</div>
+  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+    <div id="scoreBox">
+      <div id="scoreLabel">Puntos</div>
+      <div id="score">0</div>
+    </div>
+    <div id="livesBox">🐰🐰🐰</div>
+  </div>
 </div>
 
 <canvas id="gameCanvas"></canvas>
@@ -176,7 +191,7 @@
 <!-- Inicio -->
 <div class="overlay show" id="startScreen">
   <div class="overlayCard">
-    <h1>🐰 Conejito Saltarín</h1>
+    <h1>🐰 Regis Play</h1>
     <p>¡Salta cuando veas la letra que aparece arriba!</p>
     <button class="btn" onclick="startGame()">¡Jugar!</button>
   </div>
@@ -220,7 +235,7 @@ function freshState() {
     running:  false,
     score:    0,
     lives:    3,
-    speed:    3.2,
+    speed:    5.0,
     targetLetter: randomLetter(),
     bunny: {
       x: canvas.width * 0.18,
@@ -514,7 +529,7 @@ function update() {
           // nueva letra objetivo cada 3 puntos
           if (state.score % 3 === 0) changeTarget();
           // aumentar velocidad gradualmente
-          if (state.speed < 7.5) state.speed += 0.12;
+          if (state.speed < 10) state.speed += 0.15;
           if (state.tileSpawnInterval > 45) state.tileSpawnInterval -= 1.5;
         } else {
           // no saltó → perdió vida
