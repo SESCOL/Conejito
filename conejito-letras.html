@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Conejito Saltarín</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: linear-gradient(180deg, #87CEEB 0%, #B0E2FF 60%, #90EE90 60%, #228B22 100%);
+    font-family: Arial, sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    user-select: none;
+  }
+
+  /* Nubes decorativas */
+  .cloud {
+    position: absolute;
+    background: white;
+    border-radius: 50px;
+    opacity: 0.85;
+    animation: floatCloud linear infinite;
+  }
+  .cloud::before, .cloud::after {
+    content: '';
+    position: absolute;
+    background: white;
+    border-radius: 50%;
+  }
+  @keyframes floatCloud {
+    from { transform: translateX(110vw); }
+    to   { transform: translateX(-30vw); }
+  }
+
+  /* Panel superior */
+  #topPanel {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    background: rgba(255,255,255,0.35);
+    backdrop-filter: blur(6px);
+    z-index: 10;
+    flex-shrink: 0;
+  }
+
+  #targetBox {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  #targetLabel {
+    font-size: 13px;
+    color: #444;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  #targetLetter {
+    font-size: 64px;
+    font-weight: 900;
+    color: #e63946;
+    text-shadow: 3px 3px 0 #fff, 5px 5px 0 rgba(0,0,0,0.15);
+    line-height: 1;
+    min-width: 80px;
+    text-align: center;
+    transition: transform 0.15s;
+  }
+  #targetLetter.pulse {
+    transform: scale(1.3);
+  }
+
+  #scoreBox {
+    text-align: center;
+  }
+  #scoreLabel { font-size: 12px; color: #444; font-weight: bold; }
+  #score { font-size: 36px; font-weight: 900; color: #2d6a4f; }
+  #livesBox { font-size: 28px; letter-spacing: 4px; }
+
+  /* Canvas */
+  #gameCanvas {
+    display: block;
+    flex: 1;
+    width: 100%;
+  }
+
+  /* Overlays */
+  .overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 100;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+  }
+  .overlay.show { display: flex; }
+  .overlayCard {
+    background: white;
+    border-radius: 24px;
+    padding: 36px 48px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  }
+  .overlayCard h1 { font-size: 40px; margin-bottom: 8px; }
+  .overlayCard p  { font-size: 20px; color: #555; margin-bottom: 20px; }
+  .btn {
+    background: #e63946;
+    color: white;
+    border: none;
+    border-radius: 50px;
+    padding: 14px 40px;
+    font-size: 22px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 6px 0 #a11;
+    transition: transform 0.1s, box-shadow 0.1s;
+  }
+  .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #a11; }
+
+  /* Instrucción móvil */
+  #tapHint {
+    position: fixed;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255,255,255,0.7);
+    padding: 6px 18px;
+    border-radius: 20px;
+    font-size: 13px;
+    color: #444;
+    pointer-events: none;
+    z-index: 5;
+  }
+</style>
+</head>
+<body>
+
+<!-- Nubes -->
+<div class="cloud" style="width:90px;height:28px;top:5%;animation-duration:18s;animation-delay:-5s">
+  <div style="width:50px;height:50px;top:-28px;left:15px;position:absolute;background:white;border-radius:50%"></div>
+  <div style="width:35px;height:35px;top:-18px;left:42px;position:absolute;background:white;border-radius:50%"></div>
+</div>
+<div class="cloud" style="width:70px;height:22px;top:12%;animation-duration:24s;animation-delay:-12s">
+  <div style="width:38px;height:38px;top:-22px;left:10px;position:absolute;background:white;border-radius:50%"></div>
+</div>
+<div class="cloud" style="width:110px;height:30px;top:8%;animation-duration:30s;animation-delay:-20s">
+  <div style="width:55px;height:55px;top:-32px;left:22px;position:absolute;background:white;border-radius:50%"></div>
+  <div style="width:40px;height:40px;top:-22px;left:58px;position:absolute;background:white;border-radius:50%"></div>
+</div>
+
+<!-- Panel superior -->
+<div id="topPanel">
+  <div id="targetBox">
+    <span id="targetLabel">¡Salta con la letra!</span>
+    <div id="targetLetter">A</div>
+  </div>
+  <div id="scoreBox">
+    <div id="scoreLabel">Puntos</div>
+    <div id="score">0</div>
+  </div>
+  <div id="livesBox">🐰🐰🐰</div>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+<div id="tapHint">Toca la pantalla o presiona ESPACIO para saltar</div>
+
+<!-- Inicio -->
+<div class="overlay show" id="startScreen">
+  <div class="overlayCard">
+    <h1>🐰 Conejito Saltarín</h1>
+    <p>¡Salta cuando veas la letra que aparece arriba!</p>
+    <button class="btn" onclick="startGame()">¡Jugar!</button>
+  </div>
+</div>
+
+<!-- Game Over -->
+<div class="overlay" id="gameOverScreen">
+  <div class="overlayCard">
+    <h1>😢 ¡Fin del juego!</h1>
+    <p>Puntuación: <strong id="finalScore">0</strong></p>
+    <button class="btn" onclick="startGame()">¡Otra vez!</button>
+  </div>
+</div>
+
+<script>
+// ── CANVAS SETUP ──────────────────────────────────────────────
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+function resize() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight - document.getElementById('topPanel').offsetHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ── CONSTANTES ────────────────────────────────────────────────
+const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+const GROUND_RATIO = 0.72; // % de la altura del canvas
+const TILE_W  = 80;
+const TILE_H  = 44;
+const JUMP_FORCE = -14;
+const GRAVITY   = 0.55;
+
+// ── ESTADO ────────────────────────────────────────────────────
+let state = {};
+
+function freshState() {
+  const groundY = Math.floor(canvas.height * GROUND_RATIO);
+  return {
+    running:  false,
+    score:    0,
+    lives:    3,
+    speed:    3.2,
+    targetLetter: randomLetter(),
+    bunny: {
+      x: canvas.width * 0.18,
+      y: groundY - 64,
+      vy: 0,
+      grounded: true,
+      frame: 0,
+      frameTimer: 0,
+      jumping: false,
+    },
+    tiles: [],          // {x, letter, hit}
+    particles: [],      // small celebration sparks
+    groundY,
+    tileSpawnTimer: 0,
+    tileSpawnInterval: 90,
+    speedTimer: 0,
+    blink: false,
+    blinkTimer: 0,
+    wrongFlash: 0,
+    correctFlash: 0,
+  };
+}
+
+// ── HELPERS ───────────────────────────────────────────────────
+function randomLetter() {
+  return LETTERS[Math.floor(Math.random() * LETTERS.length)];
+}
+
+function weightedLetter(target) {
+  // 30% de probabilidad de que salga la letra objetivo
+  if (Math.random() < 0.28) return target;
+  let l;
+  do { l = randomLetter(); } while (l === target);
+  return l;
+}
+
+// ── JUMP ──────────────────────────────────────────────────────
+function tryJump() {
+  const b = state.bunny;
+  if (!state.running) return;
+  if (!b.grounded) return;
+  b.vy = JUMP_FORCE;
+  b.grounded = false;
+  b.jumping = true;
+}
+
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space') { e.preventDefault(); tryJump(); }
+});
+canvas.addEventListener('pointerdown', () => tryJump());
+
+// ── DIBUJO DEL CONEJITO (vectorial simple) ────────────────────
+function drawBunny(x, y, frame, jumping) {
+  ctx.save();
+  ctx.translate(x, y);
+
+  // sombra suave
+  ctx.fillStyle = 'rgba(0,0,0,0.12)';
+  ctx.beginPath();
+  ctx.ellipse(22, 66, 20, 6, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // piernas animadas
+  const legSwing = jumping ? -18 : Math.sin(frame * 0.4) * 10;
+  ctx.fillStyle = '#f8f0e3';
+  // pierna izq
+  ctx.save();
+  ctx.translate(10, 50);
+  ctx.rotate((legSwing) * Math.PI / 180);
+  ctx.fillRect(-5, 0, 10, 20);
+  ctx.restore();
+  // pierna der
+  ctx.save();
+  ctx.translate(30, 50);
+  ctx.rotate((-legSwing) * Math.PI / 180);
+  ctx.fillRect(-5, 0, 10, 20);
+  ctx.restore();
+
+  // cuerpo
+  ctx.fillStyle = '#f8f0e3';
+  ctx.beginPath();
+  ctx.ellipse(22, 38, 18, 22, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#d4c5b0';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // cola
+  ctx.fillStyle = 'white';
+  ctx.beginPath();
+  ctx.arc(38, 44, 8, 0, Math.PI * 2);
+  ctx.fill();
+
+  // cabeza
+  ctx.fillStyle = '#f8f0e3';
+  ctx.beginPath();
+  ctx.ellipse(22, 16, 15, 14, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#d4c5b0';
+  ctx.stroke();
+
+  // orejas
+  ctx.fillStyle = '#f8f0e3';
+  // oreja izq
+  ctx.beginPath();
+  ctx.ellipse(14, -4, 5, 14, -0.2, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#ffb3c6';
+  ctx.beginPath();
+  ctx.ellipse(14, -4, 2.5, 10, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+  // oreja der
+  ctx.fillStyle = '#f8f0e3';
+  ctx.beginPath();
+  ctx.ellipse(30, -4, 5, 14, 0.2, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#ffb3c6';
+  ctx.beginPath();
+  ctx.ellipse(30, -4, 2.5, 10, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ojos
+  ctx.fillStyle = '#333';
+  ctx.beginPath(); ctx.arc(16, 14, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(28, 14, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'white';
+  ctx.beginPath(); ctx.arc(17, 13, 1.2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(29, 13, 1.2, 0, Math.PI * 2); ctx.fill();
+
+  // nariz
+  ctx.fillStyle = '#ff9999';
+  ctx.beginPath(); ctx.arc(22, 19, 2.5, 0, Math.PI * 2); ctx.fill();
+
+  // boca feliz / expresión salto
+  ctx.strokeStyle = '#888';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  if (jumping) {
+    ctx.arc(22, 20, 4, 0, Math.PI); // boca abierta sorpresa
+  } else {
+    ctx.moveTo(18, 22); ctx.quadraticCurveTo(22, 26, 26, 22);
+  }
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+// ── DIBUJO TILE ───────────────────────────────────────────────
+function drawTile(t, isTarget) {
+  const x = t.x, y = state.groundY;
+  const hit = t.hit;
+
+  // sombra
+  ctx.fillStyle = 'rgba(0,0,0,0.13)';
+  ctx.fillRect(x + 3, y + TILE_H + 3, TILE_W - 6, 6);
+
+  // cuerpo del tile
+  const baseColor = hit === 'correct' ? '#a8e063' :
+                    hit === 'wrong'   ? '#ff6b6b' :
+                    isTarget          ? '#fff9c4' : '#ffe0b2';
+  const borderColor = hit === 'correct' ? '#56ab2f' :
+                      hit === 'wrong'   ? '#c0392b' :
+                      isTarget          ? '#f9c74f' : '#f4a261';
+
+  ctx.fillStyle = baseColor;
+  roundRect(ctx, x, y, TILE_W, TILE_H, 10);
+  ctx.fill();
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = 3;
+  roundRect(ctx, x, y, TILE_W, TILE_H, 10);
+  ctx.stroke();
+
+  // letra
+  ctx.fillStyle = hit ? 'white' : '#333';
+  ctx.font = `bold ${isTarget ? 28 : 24}px Arial`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(t.letter, x + TILE_W / 2, y + TILE_H / 2);
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+}
+
+// ── PARTÍCULAS ────────────────────────────────────────────────
+function spawnParticles(x, y, color) {
+  for (let i = 0; i < 10; i++) {
+    state.particles.push({
+      x, y,
+      vx: (Math.random() - 0.5) * 6,
+      vy: Math.random() * -6 - 2,
+      life: 40,
+      color,
+      r: Math.random() * 5 + 3,
+    });
+  }
+}
+
+// ── UPDATE ────────────────────────────────────────────────────
+function update() {
+  if (!state.running) return;
+
+  const b     = state.bunny;
+  const gY    = state.groundY;
+  const floorY = gY - 64;
+
+  // física conejito
+  b.vy += GRAVITY;
+  b.y  += b.vy;
+  if (b.y >= floorY) {
+    b.y = floorY;
+    b.vy = 0;
+    b.grounded = true;
+    b.jumping  = false;
+  }
+
+  // animación frames
+  b.frameTimer++;
+  if (b.frameTimer > 5) { b.frame++; b.frameTimer = 0; }
+
+  // spawn tiles
+  state.tileSpawnTimer++;
+  if (state.tileSpawnTimer >= state.tileSpawnInterval) {
+    state.tileSpawnTimer = 0;
+    state.tiles.push({
+      x: canvas.width + 10,
+      letter: weightedLetter(state.targetLetter),
+      hit: null,
+    });
+  }
+
+  // mover tiles y detectar colisión
+  for (let i = state.tiles.length - 1; i >= 0; i--) {
+    const t = state.tiles[i];
+    t.x -= state.speed;
+
+    // zona de pisada del conejito (base de sus pies)
+    const bunnyLeft  = b.x + 4;
+    const bunnyRight = b.x + 40;
+    const bunnyFeet  = b.y + 68;
+
+    const tileLeft  = t.x;
+    const tileRight = t.x + TILE_W;
+    const tileTop   = gY;
+
+    const overlapping = bunnyRight > tileLeft && bunnyLeft < tileRight;
+    const onTile      = Math.abs(bunnyFeet - tileTop) < 12 && b.grounded;
+
+    if (overlapping && !t.hit) {
+      if (t.letter === state.targetLetter) {
+        // conejito está sobre el tile de la letra correcta
+        if (onTile) {
+          // pisó sin saltar → error
+          t.hit = 'wrong';
+          loseLife();
+          state.wrongFlash = 18;
+        }
+        // si ya saltó (no está en el suelo) se evalúa más abajo
+      } else {
+        // letra incorrecta: si saltó encima → error
+        if (!b.grounded && bunnyFeet <= tileTop + 20 && b.vy >= 0) {
+          t.hit = 'wrong';
+          loseLife();
+          state.wrongFlash = 18;
+        }
+      }
+    }
+
+    // detectar salto exitoso sobre la letra correcta
+    if (t.letter === state.targetLetter && !t.hit) {
+      const jumped = !b.grounded || b.jumping;
+      const passed = t.x + TILE_W < b.x - 2; // tile ya pasó al conejito
+      if (passed) {
+        // ¿el conejito saltó sobre este tile?
+        if (t._bunnyJumpedOver) {
+          t.hit = 'correct';
+          state.score++;
+          document.getElementById('score').textContent = state.score;
+          spawnParticles(t.x + TILE_W / 2, gY - 10, '#56ab2f');
+          state.correctFlash = 14;
+          // nueva letra objetivo cada 3 puntos
+          if (state.score % 3 === 0) changeTarget();
+          // aumentar velocidad gradualmente
+          if (state.speed < 7.5) state.speed += 0.12;
+          if (state.tileSpawnInterval > 45) state.tileSpawnInterval -= 1.5;
+        } else {
+          // no saltó → perdió vida
+          t.hit = 'wrong';
+          loseLife();
+          state.wrongFlash = 18;
+        }
+      }
+
+      // marcar que el conejito saltó mientras el tile estaba cerca
+      if (overlapping && !b.grounded) t._bunnyJumpedOver = true;
+    }
+
+    if (t.x + TILE_W < 0) state.tiles.splice(i, 1);
+  }
+
+  // partículas
+  for (let i = state.particles.length - 1; i >= 0; i--) {
+    const p = state.particles[i];
+    p.x += p.vx; p.y += p.vy; p.vy += 0.3; p.life--;
+    if (p.life <= 0) state.particles.splice(i, 1);
+  }
+
+  // timers de flash
+  if (state.wrongFlash   > 0) state.wrongFlash--;
+  if (state.correctFlash > 0) state.correctFlash--;
+
+  // blink
+  state.blinkTimer++;
+  if (state.blinkTimer > 30) { state.blink = !state.blink; state.blinkTimer = 0; }
+}
+
+function loseLife() {
+  state.lives--;
+  updateLivesUI();
+  if (state.lives <= 0) endGame();
+}
+
+function updateLivesUI() {
+  document.getElementById('livesBox').textContent = '🐰'.repeat(Math.max(0, state.lives));
+}
+
+function changeTarget() {
+  let nl;
+  do { nl = randomLetter(); } while (nl === state.targetLetter);
+  state.targetLetter = nl;
+  document.getElementById('targetLetter').textContent = nl;
+  const el = document.getElementById('targetLetter');
+  el.classList.add('pulse');
+  setTimeout(() => el.classList.remove('pulse'), 300);
+}
+
+// ── DRAW ──────────────────────────────────────────────────────
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // suelo verde (ya está en CSS background, pero dibujamos un detalle)
+  const gY = state.groundY;
+
+  // línea de hierba
+  ctx.fillStyle = '#52b788';
+  ctx.fillRect(0, gY + TILE_H, canvas.width, 8);
+  ctx.fillStyle = '#40916c';
+  ctx.fillRect(0, gY + TILE_H + 8, canvas.width, canvas.height);
+
+  // briznas de hierba decorativas
+  ctx.strokeStyle = '#52b788';
+  ctx.lineWidth = 2;
+  for (let gx = 0; gx < canvas.width; gx += 30) {
+    const h = 6 + Math.sin(gx * 0.3) * 3;
+    ctx.beginPath();
+    ctx.moveTo(gx, gY + TILE_H);
+    ctx.quadraticCurveTo(gx + 4, gY + TILE_H - h, gx + 8, gY + TILE_H);
+    ctx.stroke();
+  }
+
+  // flash de fondo
+  if (state.wrongFlash > 0) {
+    ctx.fillStyle = `rgba(255,0,0,${state.wrongFlash / 18 * 0.18})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  if (state.correctFlash > 0) {
+    ctx.fillStyle = `rgba(0,220,80,${state.correctFlash / 14 * 0.15})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // tiles
+  state.tiles.forEach(t => {
+    drawTile(t, t.letter === state.targetLetter);
+  });
+
+  // conejito
+  drawBunny(state.bunny.x - 22, state.bunny.y, state.bunny.frame, state.bunny.jumping);
+
+  // partículas
+  state.particles.forEach(p => {
+    ctx.globalAlpha = p.life / 40;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  });
+
+  // letra objetivo parpadeante en el camino (recordatorio flotante)
+  if (state.blink) {
+    ctx.font = 'bold 18px Arial';
+    ctx.fillStyle = 'rgba(230,57,70,0.55)';
+    ctx.textAlign = 'center';
+    ctx.fillText('↑ ¡SALTA!', state.bunny.x + 18, state.bunny.y - 18);
+  }
+}
+
+// ── GAME LOOP ─────────────────────────────────────────────────
+let raf;
+function loop() {
+  update();
+  draw();
+  raf = requestAnimationFrame(loop);
+}
+
+// ── INICIO / FIN ──────────────────────────────────────────────
+function startGame() {
+  cancelAnimationFrame(raf);
+  document.getElementById('startScreen').classList.remove('show');
+  document.getElementById('gameOverScreen').classList.remove('show');
+
+  state = freshState();
+  state.running = true;
+
+  document.getElementById('score').textContent = '0';
+  document.getElementById('targetLetter').textContent = state.targetLetter;
+  updateLivesUI();
+
+  loop();
+}
+
+function endGame() {
+  state.running = false;
+  cancelAnimationFrame(raf);
+  document.getElementById('finalScore').textContent = state.score;
+  document.getElementById('gameOverScreen').classList.add('show');
+}
+</script>
+</body>
+</html>
