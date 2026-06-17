@@ -246,6 +246,7 @@ function freshState(){
     targetLetter:randomLetter(),
     wolfAppearAt:2,
     wolfDefeats:0,
+    bearDefeats:0,
     level:1,
     rain:false,
     raindrops:[],
@@ -265,7 +266,8 @@ function freshState(){
     groundY:gY,
     tileSpawnTimer:0,tileSpawnInterval:82,
     blink:false,blinkTimer:0,
-    wrongFlash:0,correctFlash:0,speedUpFlash:0,
+    wrongFlash:0,correctFlash:0,speedUpFlash:0,wrongStreak:0,
+    tileBounceTimer:0,
     fightBanner:0,
     clouds:[{x:-100,y:0,size:1.2,speed:0.3},{x:-300,y:0,size:0.9,speed:0.25},{x:-500,y:0,size:1.5,speed:0.2}],
     birds:[],
@@ -900,7 +902,12 @@ function drawFruit(cx,cy,r,rotation,baseColor,letter,fontSize,glow,withShadow=tr
 
 // ── TILE LOBO (frutas de colores) ──────────────────────────────
 function drawWolfTile(fl){
-  const x=fl.x,y=state.groundY,isTarget=fl.letter===state.targetLetter;
+  const x=fl.x;
+  let y=state.groundY;
+  if(state.level===2){
+    y-=Math.abs(Math.sin(state.tileBounceTimer*0.15+(fl.bouncePhase||0)))*16;
+  }
+  const isTarget=fl.letter===state.targetLetter;
   const cx=x+TILE_W/2,cy=y+TILE_H/2,r=TILE_H*0.52;
   const rotation=-x/(r*0.9);
   let baseColor;
@@ -912,7 +919,11 @@ function drawWolfTile(fl){
 
 // ── TILES (modo run, frutas rodando) ───────────────────────────
 function drawTile(t,isTarget){
-  const x=t.x,y=state.groundY;
+  const x=t.x;
+  let y=state.groundY;
+  if(state.level===2){
+    y-=Math.abs(Math.sin(state.tileBounceTimer*0.15+(t.bouncePhase||0)))*16;
+  }
   const cx=x+TILE_W/2,cy=y+TILE_H/2,r=TILE_H*0.52;
   const rotation=-x/(r*0.9);
   let baseColor;
@@ -957,13 +968,14 @@ function update(){
   b.frameTimer++;if(b.frameTimer>4){b.frame++;b.frameTimer=0;}
 
   if(state.fightBanner>0)state.fightBanner--;
+  state.tileBounceTimer++;
 
   // ── MODO RUN ────────────────────────────────────────────────
   if(state.mode==='run'){
     state.tileSpawnTimer++;
     if(state.tileSpawnTimer>=state.tileSpawnInterval){
       state.tileSpawnTimer=0;
-      state.tiles.push({x:canvas.width+10,letter:weightedLetter(state.targetLetter),hit:null});
+      state.tiles.push({x:canvas.width+10,letter:weightedLetter(state.targetLetter),hit:null,bouncePhase:Math.random()*Math.PI*2});
     }
     for(let i=state.tiles.length-1;i>=0;i--){
       const t=state.tiles[i];t.x-=state.speed;
@@ -978,7 +990,7 @@ function update(){
         const passed=t.x+TILE_W<b.x-2;
         if(passed){
           if(t._jumped){
-            t.hit='correct';state.score++;
+            t.hit='correct';state.score++;state.wrongStreak=0;
             document.getElementById('score').textContent=state.score;
             spawnParticles(t.x+TILE_W/2,gY-10,'#56ab2f');
             state.correctFlash=14;playCorrect();
@@ -1028,7 +1040,7 @@ function update(){
       // spawn desde el lado derecho, igual que los tiles normales
       const wolfColors=['#ff4444','#ff8800','#ffcc00','#44cc44','#4488ff','#cc44ff','#ff44aa'];
       const wc=wolfColors[Math.floor(Math.random()*wolfColors.length)];
-      state.fightLetters.push({x:canvas.width+10, letter, hit:null, _jumped:false, color:wc});
+      state.fightLetters.push({x:canvas.width+10, letter, hit:null, _jumped:false, color:wc, bouncePhase:Math.random()*Math.PI*2});
       playWolfThrow();
       w.throwAnim=22; // frames de animación de lanzamiento
       w.throwTimer=72-((WOLF_HP-w.hp)*14);
@@ -1065,6 +1077,7 @@ function update(){
           if(fl._jumped){
             // ¡acierto! golpea al lobo
             fl.hit='correct';
+            state.wrongStreak=0;
             w.hp--;
             w.hitFlash=14;
             playWolfHit();
@@ -1078,6 +1091,7 @@ function update(){
               spawnParticles(w.x+26,w.y+20,'#f9c74f',22);
               spawnParticles(w.x+26,w.y+20,'#ff7700',14);
               state.wolfDefeats++;
+              if(state.level===2) state.bearDefeats++;
               if(state.wolfDefeats%2===0 && state.lives<MAX_LIVES){
                 state.lives++;
                 updateLivesUI();
@@ -1619,6 +1633,11 @@ function updateWinMode(){
 }
 
 function loseLife(){
+  state.wrongStreak=(state.wrongStreak||0)+1;
+  if(state.wrongStreak<2){
+    return; // primer fallo: solo aviso (flash/sonido), no se descuenta vida aún
+  }
+  state.wrongStreak=0;
   state.lives--;updateLivesUI();
   if(state.lives<=0){
     if(state.mode==='fight'){
@@ -1649,8 +1668,10 @@ function cancelGameOverTimer(){
 }
 
 function tryGameOverOrContinue(){
-  // Si ha derrotado al lobo 2+ veces, permite continuar
-  if(state.wolfDefeats>=2){
+  // En nivel 2, basta con derrotar al oso una vez para poder continuar.
+  // En nivel 1, se requiere derrotar al lobo 2+ veces.
+  const puedeContinuar = state.level===2 ? state.bearDefeats>=1 : state.wolfDefeats>=2;
+  if(puedeContinuar){
     state.continueGameMode=true;
     state.running=true; // mantener el loop
   } else {
@@ -1696,7 +1717,7 @@ function drawGameOverContinue(){
   // descripción
   ctx.font='22px Arial';
   ctx.fillStyle='#cccccc';
-  ctx.fillText(`Has derrotado al lobo ${state.wolfDefeats} veces`,canvas.width/2,canvas.height*0.42);
+  ctx.fillText(state.level===2 ? `Has derrotado al oso ${state.bearDefeats} veces` : `Has derrotado al lobo ${state.wolfDefeats} veces`,canvas.width/2,canvas.height*0.42);
   ctx.fillText('¡Gánate otra oportunidad!',canvas.width/2,canvas.height*0.49);
   
   ctx.restore();
