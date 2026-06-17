@@ -859,10 +859,12 @@ function shadeColor(hex,percent){
   const R=f>>16,G=(f>>8)&0x00FF,B=f&0x0000FF;
   return '#'+(0x1000000+(Math.round((t-R)*p)+R)*0x10000+(Math.round((t-G)*p)+G)*0x100+(Math.round((t-B)*p)+B)).toString(16).slice(1);
 }
-function drawFruit(cx,cy,r,rotation,baseColor,letter,fontSize,glow){
+function drawFruit(cx,cy,r,rotation,baseColor,letter,fontSize,glow,withShadow=true){
   // sombra elíptica en el suelo
-  ctx.fillStyle='rgba(0,0,0,0.18)';
-  ctx.beginPath();ctx.ellipse(cx,cy+r+8,r*0.85,7,0,0,Math.PI*2);ctx.fill();
+  if(withShadow){
+    ctx.fillStyle='rgba(0,0,0,0.18)';
+    ctx.beginPath();ctx.ellipse(cx,cy+r+8,r*0.85,7,0,0,Math.PI*2);ctx.fill();
+  }
   // halo dorado si es la letra objetivo
   if(glow){
     ctx.strokeStyle='rgba(255,215,0,0.55)';ctx.lineWidth=4;
@@ -1351,11 +1353,17 @@ function draw(){
     ctx.restore();
   }
 
-  // indicador en modo pelea
-  if(state.mode==='fight'&&!state.wolf.defeated&&state.fightBanner<=0&&state.blink){
-    ctx.font='bold 20px Arial';ctx.fillStyle='rgba(255,255,255,0.9)';
-    ctx.textAlign='center';
-    ctx.fillText(`⬆️ ¡SALTA la letra "${state.targetLetter}"!`,canvas.width/2,state.groundY-130);
+  // indicador en modo pelea (siempre visible, letra en forma de fruta)
+  if(state.mode==='fight'&&!state.wolf.defeated&&state.fightBanner<=0){
+    ctx.font='bold 20px Arial';ctx.fillStyle='rgba(255,255,255,0.95)';
+    ctx.textAlign='left';ctx.textBaseline='middle';
+    const label='⬆️ ¡SALTA!';
+    const tw=ctx.measureText(label).width;
+    const iconR=20,gap=10,msgY=state.groundY-130;
+    const startX=canvas.width/2-(tw+gap+iconR*2)/2;
+    ctx.fillText(label,startX,msgY);
+    const fc=FRUIT_COLORS[state.targetLetter.charCodeAt(0)%FRUIT_COLORS.length];
+    drawFruit(startX+tw+gap+iconR,msgY,iconR,(Date.now()/300)%(Math.PI*2),fc,state.targetLetter,20,false,false);
   }
 
   // barra progreso (modo run)
@@ -1371,10 +1379,16 @@ function draw(){
     ctx.fillText(`🏆 ${progress}/${goal}`,canvas.width/2,bY+bH+14);
   }
 
-  // recordatorio salto modo run
-  if(state.mode==='run'&&state.blink){
-    ctx.font='bold 18px Arial';ctx.fillStyle='rgba(230,57,70,0.55)';
-    ctx.textAlign='center';ctx.fillText('↑ ¡SALTA!',state.bunny.x+18,state.bunny.y-18);
+  // recordatorio salto modo run (siempre visible, letra en forma de fruta)
+  if(state.mode==='run'){
+    ctx.font='bold 18px Arial';ctx.fillStyle='rgba(230,57,70,0.85)';
+    ctx.textAlign='left';ctx.textBaseline='middle';
+    const label='↑ ¡SALTA!';
+    const tw=ctx.measureText(label).width;
+    const iconR=16,gap=8,msgX=state.bunny.x+18,msgY=state.bunny.y-18;
+    ctx.fillText(label,msgX,msgY);
+    const fc=FRUIT_COLORS[state.targetLetter.charCodeAt(0)%FRUIT_COLORS.length];
+    drawFruit(msgX+tw+gap+iconR,msgY,iconR,(Date.now()/300)%(Math.PI*2),fc,state.targetLetter,16,false,false);
   }
 
   // banner de cambio de nivel
