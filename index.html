@@ -228,7 +228,7 @@ const GROUND_RATIO=0.72;
 const TILE_W=96,TILE_H=54;
 const FRUIT_COLORS=['#e63946','#f3722c','#f9c74f','#90be6d','#9d4edd','#457b9d'];
 const JUMP_FORCE=-15,GRAVITY=0.58;
-const WIN_SCORE=10,SPEED_UP_EVERY=7;
+const WIN_SCORE=5,SPEED_UP_EVERY=7;
 const WOLF_HP=3;
 const MAX_LIVES=3;
 const LEVEL_TARGETS=[WIN_SCORE, WIN_SCORE*2]; // puntaje para pasar cada nivel; el último gana el juego
@@ -1647,7 +1647,12 @@ function loseLife(){
       state.running=true; // seguir el loop para la animación
       playLaugh();
     } else {
-      endGame();
+      // antes esto llamaba siempre a endGame(), saltándose la opción de
+      // continuar cuando la última vida se perdía corriendo (no en pelea).
+      // En nivel 2, con lluvia + más velocidad, es la forma más común de
+      // perder, así que "continuar" casi nunca aparecía. Ahora se evalúa
+      // igual que cuando se pierde en pelea.
+      tryGameOverOrContinue();
     }
   }
 }
