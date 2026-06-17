@@ -226,6 +226,7 @@ window.addEventListener('resize',resize);resize();
 const LETTERS='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 const GROUND_RATIO=0.72;
 const TILE_W=96,TILE_H=54;
+const FRUIT_COLORS=['#e63946','#f3722c','#f9c74f','#90be6d','#9d4edd','#457b9d'];
 const JUMP_FORCE=-15,GRAVITY=0.58;
 const WIN_SCORE=10,SPEED_UP_EVERY=7;
 const WOLF_HP=3;
@@ -852,49 +853,71 @@ function drawFightLetter(fl){
   ctx.restore();
 }
 
-// ── TILE LOBO (colores) ───────────────────────────────────────
-function drawWolfTile(fl){
-  const x=fl.x, y=state.groundY, isTarget=fl.letter===state.targetLetter;
-  const c=fl.color||'#ff8800';
-  // sombra
-  ctx.fillStyle='rgba(0,0,0,0.15)';ctx.fillRect(x+3,y+TILE_H+3,TILE_W-6,6);
-  // fondo con el color del lobo, más claro si es la letra objetivo
-  let bg, border;
-  if(fl.hit==='correct'){bg='#a8e063';border='#56ab2f';}
-  else if(fl.hit==='wrong'){bg='#ff6b6b';border='#c0392b';}
-  else if(isTarget){
-    // letra objetivo: fondo blanco con borde del color
-    bg='#ffffff';border=c;
-  } else {
-    // letra normal: fondo con el color vibrante
-    bg=c+'33'; border=c;  // color translúcido de fondo, borde sólido
+// ── FRUTA (helper de color y dibujo) ───────────────────────────
+function shadeColor(hex,percent){
+  const f=parseInt(hex.slice(1),16),t=percent<0?0:255,p=Math.abs(percent);
+  const R=f>>16,G=(f>>8)&0x00FF,B=f&0x0000FF;
+  return '#'+(0x1000000+(Math.round((t-R)*p)+R)*0x10000+(Math.round((t-G)*p)+G)*0x100+(Math.round((t-B)*p)+B)).toString(16).slice(1);
+}
+function drawFruit(cx,cy,r,rotation,baseColor,letter,fontSize,glow){
+  // sombra elíptica en el suelo
+  ctx.fillStyle='rgba(0,0,0,0.18)';
+  ctx.beginPath();ctx.ellipse(cx,cy+r+8,r*0.85,7,0,0,Math.PI*2);ctx.fill();
+  // halo dorado si es la letra objetivo
+  if(glow){
+    ctx.strokeStyle='rgba(255,215,0,0.55)';ctx.lineWidth=4;
+    ctx.beginPath();ctx.arc(cx,cy,r+5,0,Math.PI*2);ctx.stroke();
   }
-  ctx.fillStyle=bg;roundRect(ctx,x,y,TILE_W,TILE_H,10);ctx.fill();
-  ctx.strokeStyle=border;ctx.lineWidth=isTarget?4:3;roundRect(ctx,x,y,TILE_W,TILE_H,10);ctx.stroke();
-  // brillo extra en letra objetivo
-  if(isTarget&&!fl.hit){
-    ctx.strokeStyle=c;ctx.lineWidth=2;ctx.globalAlpha=0.4;
-    roundRect(ctx,x-3,y-3,TILE_W+6,TILE_H+6,13);ctx.stroke();
-    ctx.globalAlpha=1;
+  ctx.save();
+  ctx.translate(cx,cy);ctx.rotate(rotation);
+  const grad=ctx.createRadialGradient(-r*0.35,-r*0.4,r*0.1,0,0,r*1.05);
+  grad.addColorStop(0,shadeColor(baseColor,0.45));
+  grad.addColorStop(0.6,baseColor);
+  grad.addColorStop(1,shadeColor(baseColor,-0.25));
+  ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fillStyle=grad;ctx.fill();
+  ctx.lineWidth=2;ctx.strokeStyle=shadeColor(baseColor,-0.35);ctx.stroke();
+  // manchitas que giran con la fruta (sensación de rodar)
+  ctx.fillStyle='rgba(0,0,0,0.13)';
+  for(let i=0;i<3;i++){
+    const a=i*(Math.PI*2/3);
+    ctx.beginPath();
+    ctx.ellipse(Math.cos(a)*r*0.55,Math.sin(a)*r*0.55,r*0.17,r*0.1,a,0,Math.PI*2);
+    ctx.fill();
   }
-  ctx.fillStyle=fl.hit?'white':(isTarget?c:'#222');
-  ctx.font=`bold ${isTarget?36:32}px Arial`;
+  // tallito y hoja
+  ctx.fillStyle='#6b4423';ctx.fillRect(-2,-r-6,4,8);
+  ctx.fillStyle='#52b788';
+  ctx.beginPath();ctx.ellipse(6,-r-3,6,3,Math.PI/4,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+  // letra siempre vertical y legible, encima de la fruta
+  ctx.fillStyle='#ffffff';ctx.strokeStyle='rgba(0,0,0,0.55)';ctx.lineWidth=2.5;
+  ctx.font=`bold ${fontSize}px Arial`;
   ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.fillText(fl.letter,x+TILE_W/2,y+TILE_H/2);
+  ctx.strokeText(letter,cx,cy+1);ctx.fillText(letter,cx,cy+1);
 }
 
-// ── TILES (modo run) ──────────────────────────────────────────
+// ── TILE LOBO (frutas de colores) ──────────────────────────────
+function drawWolfTile(fl){
+  const x=fl.x,y=state.groundY,isTarget=fl.letter===state.targetLetter;
+  const cx=x+TILE_W/2,cy=y+TILE_H/2,r=TILE_H*0.52;
+  const rotation=-x/(r*0.9);
+  let baseColor;
+  if(fl.hit==='correct')baseColor='#7cb342';
+  else if(fl.hit==='wrong')baseColor='#c0392b';
+  else baseColor=fl.color||'#ff8800';
+  drawFruit(cx,cy,r,rotation,baseColor,fl.letter,isTarget?34:30,isTarget&&!fl.hit);
+}
+
+// ── TILES (modo run, frutas rodando) ───────────────────────────
 function drawTile(t,isTarget){
   const x=t.x,y=state.groundY;
-  ctx.fillStyle='rgba(0,0,0,0.13)';ctx.fillRect(x+3,y+TILE_H+3,TILE_W-6,6);
-  const bc=t.hit==='correct'?'#a8e063':t.hit==='wrong'?'#ff6b6b':isTarget?'#fff9c4':'#ffe0b2';
-  const sc=t.hit==='correct'?'#56ab2f':t.hit==='wrong'?'#c0392b':isTarget?'#f9c74f':'#f4a261';
-  ctx.fillStyle=bc;roundRect(ctx,x,y,TILE_W,TILE_H,10);ctx.fill();
-  ctx.strokeStyle=sc;ctx.lineWidth=3;roundRect(ctx,x,y,TILE_W,TILE_H,10);ctx.stroke();
-  ctx.fillStyle=t.hit?'white':'#222';
-  ctx.font=`bold ${isTarget?36:32}px Arial`;
-  ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.fillText(t.letter,x+TILE_W/2,y+TILE_H/2);
+  const cx=x+TILE_W/2,cy=y+TILE_H/2,r=TILE_H*0.52;
+  const rotation=-x/(r*0.9);
+  let baseColor;
+  if(t.hit==='correct')baseColor='#7cb342';
+  else if(t.hit==='wrong')baseColor='#c0392b';
+  else baseColor=FRUIT_COLORS[t.letter.charCodeAt(0)%FRUIT_COLORS.length];
+  drawFruit(cx,cy,r,rotation,baseColor,t.letter,isTarget?34:30,isTarget&&!t.hit);
 }
 
 function roundRect(ctx,x,y,w,h,r){
@@ -1330,7 +1353,7 @@ function draw(){
 
   // indicador en modo pelea
   if(state.mode==='fight'&&!state.wolf.defeated&&state.fightBanner<=0&&state.blink){
-    ctx.font='bold 17px Arial';ctx.fillStyle='rgba(230,57,70,0.75)';
+    ctx.font='bold 20px Arial';ctx.fillStyle='rgba(255,255,255,0.9)';
     ctx.textAlign='center';
     ctx.fillText(`⬆️ ¡SALTA la letra "${state.targetLetter}"!`,canvas.width/2,state.groundY-130);
   }
@@ -1612,8 +1635,8 @@ function cancelGameOverTimer(){
 }
 
 function tryGameOverOrContinue(){
-  // Si ha derrotado al lobo 3+ veces, permite continuar
-  if(state.wolfDefeats>=3){
+  // Si ha derrotado al lobo 2+ veces, permite continuar
+  if(state.wolfDefeats>=2){
     state.continueGameMode=true;
     state.running=true; // mantener el loop
   } else {
