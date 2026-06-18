@@ -150,6 +150,7 @@ function playWin(){
     tone('triangle',n.f*2,n.f*2,n.d*0.8,0.09,n.t); // armónico una octava arriba
   });
 }
+const playLifeUp=()=>{[0,0.1,0.2].forEach((t,i)=>tone('triangle',440+i*220,440+i*220,0.2,0.24,t));};
 function playLaugh(){
   // carcajada: "ja ja ja" — pulsos de tono descendente
   [0,0.18,0.36,0.54,0.72,0.90].forEach((t,i)=>{
@@ -286,6 +287,7 @@ function freshState(){
     fightBanner:0,
     clouds:[{x:-100,y:0,size:1.2,speed:0.3},{x:-300,y:0,size:0.9,speed:0.25},{x:-500,y:0,size:1.5,speed:0.2}],
     birds:[],
+    birdSpawnTimer:0,birdSpawnAt:140+Math.random()*180,
     waterOffset:0,
 
     winMode:false,
@@ -298,6 +300,8 @@ function freshState(){
     pushFrame:0,
     winFrame:0,
     carrotX:0,carrotVisible:false,
+    bonusCarrot:null,carrotSpawnedLevels:{},carrotRunTimer:0,carrotSpawnAt:null,
+    facedEnemyLevels:{},
   };
 }
 
@@ -359,6 +363,7 @@ function enterFightMode(){
 function exitFightMode(){
   state.fightLetters=[];
   state.tiles=[];
+  state.facedEnemyLevels[state.level]=true; // ya enfrentó al lobo/oso en este nivel
   if(state.score>=currentLevelTarget()){ handleScoreMilestone(); return; }
   state.mode='run';
   state.wolfAppearAt=state.score+2;
@@ -970,12 +975,23 @@ function update(){
   const gY=state.groundY;
   const floorY=gY-64;
 
-  // animar pájaros
+  // animar pájaros + generar bandadas nuevas de vez en cuando
   if(state.birds) state.birds.forEach((bird,i)=>{
     bird.x+=bird.speed;
     bird.frame++;
     if(bird.x>canvas.width+100) state.birds.splice(i,1);
   });
+  state.birdSpawnTimer=(state.birdSpawnTimer||0)+1;
+  if(state.birdSpawnTimer>=state.birdSpawnAt){
+    state.birdSpawnTimer=0;
+    state.birdSpawnAt=160+Math.random()*220; // próxima bandada en ~2.5-6s
+    const flockSize=2+Math.floor(Math.random()*3); // 2 a 4 pájaros
+    const baseY=canvas.height*0.1+Math.random()*canvas.height*0.18;
+    const baseSpeed=1.6+Math.random()*1.4;
+    for(let k=0;k<flockSize;k++){
+      state.birds.push({x:-40-k*34,y:baseY+k*9,speed:baseSpeed,frame:Math.floor(Math.random()*20)});
+    }
+  }
 
   // física conejito
   b.vy+=GRAVITY;b.y+=b.vy;
@@ -987,6 +1003,32 @@ function update(){
 
   // ── MODO RUN ────────────────────────────────────────────────
   if(state.mode==='run'){
+    // ── ZANAHORIA VOLADORA BONUS (una sola vez por nivel) ────────
+    if(!state.bonusCarrot && !state.carrotSpawnedLevels[state.level] && state.facedEnemyLevels[state.level]){
+      if(state.carrotSpawnAt==null) state.carrotSpawnAt=110+Math.random()*180;
+      state.carrotRunTimer=(state.carrotRunTimer||0)+1;
+      if(state.carrotRunTimer>=state.carrotSpawnAt){
+        state.carrotSpawnedLevels[state.level]=true;
+        state.bonusCarrot={x:canvas.width+40,y:gY-150,speed:Math.max(1.8,state.speed*0.45),frame:0};
+        state.carrotRunTimer=0;state.carrotSpawnAt=null;
+      }
+    }
+    if(state.bonusCarrot){
+      const c=state.bonusCarrot;
+      c.x-=c.speed;c.frame++;
+      const bL2=b.x+4,bR2=b.x+40,bT2=b.y,bF2=b.y+68;
+      const overX=bR2>c.x-24&&bL2<c.x+24;
+      const overY=bF2>c.y-26&&bT2<c.y+26;
+      if(overX&&overY&&!b.grounded){
+        if(state.lives<MAX_LIVES){state.lives++;updateLivesUI();}
+        playLifeUp();
+        spawnParticles(c.x,c.y,'#ff8800',16);
+        spawnParticles(c.x,c.y,'#ffdd00',10);
+        state.bonusCarrot=null;
+      } else if(c.x<-70){
+        state.bonusCarrot=null;
+      }
+    }
     state.tileSpawnTimer++;
     if(state.tileSpawnTimer>=state.tileSpawnInterval){
       state.tileSpawnTimer=0;
@@ -1179,6 +1221,41 @@ function drawBirds(bird){
   ctx.restore();
 }
 
+// ── ZANAHORIA VOLADORA BONUS ───────────────────────────────────
+function drawBonusCarrot(c){
+  ctx.save();
+  const wob=Math.sin((c.frame||0)*0.2)*6;
+  ctx.translate(c.x,c.y+wob);
+  // halo brillante para que se note que es especial
+  ctx.strokeStyle='rgba(255,221,0,0.55)';ctx.lineWidth=4;
+  ctx.beginPath();ctx.arc(0,0,30,0,Math.PI*2);ctx.stroke();
+  // sombra en el suelo
+  ctx.fillStyle='rgba(0,0,0,0.12)';
+  ctx.beginPath();ctx.ellipse(0,state.groundY-c.y-wob+8,18,5,0,0,Math.PI*2);ctx.fill();
+  ctx.rotate(Math.sin((c.frame||0)*0.08)*0.12);
+  // hojitas (en la punta trasera, derecha, ya que vuela hacia la izquierda)
+  ctx.fillStyle='#33bb33';
+  [[16,-7,-0.5],[20,0,0],[16,7,0.5]].forEach(([lx,ly,rot])=>{
+    ctx.save();ctx.translate(lx,ly);ctx.rotate(rot);
+    ctx.beginPath();ctx.moveTo(0,0);ctx.quadraticCurveTo(11,-5,17,0);ctx.quadraticCurveTo(11,5,0,0);ctx.fill();
+    ctx.restore();
+  });
+  // cuerpo (apuntando hacia la izquierda, dirección de vuelo)
+  const grad=ctx.createLinearGradient(-26,0,18,0);
+  grad.addColorStop(0,'#ffb347');grad.addColorStop(1,'#ff8800');
+  ctx.fillStyle=grad;
+  ctx.beginPath();
+  ctx.moveTo(-26,0);
+  ctx.quadraticCurveTo(-4,-15,18,0);
+  ctx.quadraticCurveTo(-4,15,-26,0);
+  ctx.closePath();ctx.fill();
+  ctx.strokeStyle='#cc5500';ctx.lineWidth=2;ctx.stroke();
+  // rayitas
+  ctx.strokeStyle='#ee6600';ctx.lineWidth=1.3;
+  [-4,4].forEach(dy=>{ctx.beginPath();ctx.moveTo(-14,dy*0.6);ctx.lineTo(4,dy*0.3);ctx.stroke();});
+  ctx.restore();
+}
+
 function drawRain(){
   if(!state.rain) return;
   ctx.save();
@@ -1285,6 +1362,7 @@ function draw(){
 
   // tiles
   if(state.mode==='run') state.tiles.forEach(t=>drawTile(t,t.letter===state.targetLetter));
+  if(state.mode==='run' && state.bonusCarrot) drawBonusCarrot(state.bonusCarrot);
 
   // letras del lobo con colores animados
   if(state.mode==='fight') state.fightLetters.forEach(fl=>drawWolfTile(fl));
@@ -1697,6 +1775,7 @@ function continueGame(){
   state.mode='run';
   state.fightLetters=[];
   state.tiles=[];
+  state.bonusCarrot=null;
   if(state.level===2){
     state.level2SuccessfulJumps=0; // resetear contador al continuar
   }
