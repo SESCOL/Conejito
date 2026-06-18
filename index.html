@@ -134,7 +134,22 @@ const playWolfHit=()=>tone('sawtooth',300,80,0.3,0.3);
 const playWolfDefeated=()=>{[0,0.12,0.24,0.36].forEach((t,i)=>tone('sawtooth',[280,220,180,120][i],60,0.15,0.25,t));};
 const playWolfThrow=()=>tone('square',600,200,0.12,0.15);
 const playSpeedUp=()=>{[0,0.08,0.16,0.24].forEach((t,i)=>tone('square',400+i*120,400+i*120,0.1,0.15,t));};
-const playWin=()=>{[523,659,784,1047].forEach((f,i)=>tone('triangle',f,f,0.35,0.3,i*0.18));};
+function playWin(){
+  // fanfarria triunfal: trompetas (varias capas de osciladores) con ritmo "ta-ta-ta-taaa"
+  const melody=[
+    {f:392.00,t:0,   d:0.16}, // Sol
+    {f:392.00,t:0.18,d:0.16}, // Sol
+    {f:392.00,t:0.36,d:0.16}, // Sol
+    {f:523.25,t:0.54,d:0.55}, // Do (sostenido)
+    {f:587.33,t:1.16,d:0.16}, // Re
+    {f:659.25,t:1.34,d:0.85}, // Mi (final, sostenido)
+  ];
+  melody.forEach(n=>{
+    tone('sawtooth',n.f,n.f,n.d,0.26,n.t);       // cuerpo de trompeta
+    tone('square',n.f,n.f,n.d,0.14,n.t);          // brillo metálico
+    tone('triangle',n.f*2,n.f*2,n.d*0.8,0.09,n.t); // armónico una octava arriba
+  });
+}
 function playLaugh(){
   // carcajada: "ja ja ja" — pulsos de tono descendente
   [0,0.18,0.36,0.54,0.72,0.90].forEach((t,i)=>{
@@ -1092,13 +1107,6 @@ function update(){
               spawnParticles(w.x+26,w.y+20,'#ff7700',14);
               state.wolfDefeats++;
               if(state.level===2) state.bearDefeats++;
-              if(state.wolfDefeats%2===0 && state.lives<MAX_LIVES){
-                state.lives++;
-                updateLivesUI();
-                playSpeedUp();
-                spawnParticles(w.x+26,w.y+20,'#ff5577',16);
-                spawnParticles(b.x+22,b.y,'#ff5577',12);
-              }
               if(state.score>=currentLevelTarget()){ setTimeout(()=>handleScoreMilestone(),800); }
             }
           } else {
