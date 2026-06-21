@@ -33,7 +33,7 @@
   #scoreLabel { font-size: 12px; color: #ddd; font-weight: bold; }
   #score { font-size: 36px; font-weight: 900; color: #a8e063; }
   #livesBox { font-size: 28px; letter-spacing: 4px; }
-  #gameCanvas { display: block; flex: 1; width: 100%; }
+  #gameCanvas { display: block; flex: 1; width: 100%; touch-action: none; }
   .overlay {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55);
     z-index: 100; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
@@ -237,6 +237,20 @@ function resize(){
   canvas.height=window.innerHeight-document.getElementById('topPanel').offsetHeight;
 }
 window.addEventListener('resize',resize);resize();
+// Reajustar una vez más cuando todo (fuentes, layout) esté listo, y en cambios de
+// orientación: evita que el tamaño visual (CSS) y el del buffer del canvas queden
+// desincronizados, que es lo que hacía fallar los toques sobre los botones.
+window.addEventListener('load',resize);
+window.addEventListener('orientationchange',()=>setTimeout(resize,150));
+setTimeout(resize,300);
+// Convierte coordenadas de pantalla (clientX/clientY) a coordenadas del canvas,
+// compensando cualquier diferencia entre el tamaño visual (CSS) y el del buffer.
+function getCanvasPos(e){
+  const rect=canvas.getBoundingClientRect();
+  const scaleX=canvas.width/rect.width;
+  const scaleY=canvas.height/rect.height;
+  return {x:(e.clientX-rect.left)*scaleX, y:(e.clientY-rect.top)*scaleY};
+}
 
 // ── CONSTANTES ────────────────────────────────────────────────
 const LETTERS='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -247,6 +261,7 @@ const JUMP_FORCE=-15,GRAVITY=0.58;
 const WIN_SCORE=5,SPEED_UP_EVERY=7;
 const WOLF_HP=3;
 const MAX_LIVES=3;
+const MAX_SPEED=5.5; // tope de velocidad: nivel intermedio, no extremo
 const LEVEL_TARGETS=[WIN_SCORE, WIN_SCORE*2]; // puntaje para pasar cada nivel; el último gana el juego
 
 // ── ESTADO ────────────────────────────────────────────────────
@@ -258,7 +273,7 @@ function freshState(){
     running:false,
     mode:'run',       // 'run' | 'fight'
     score:0,lives:MAX_LIVES,
-    speed:6.5,speedLevel:1,
+    speed:1.7,speedLevel:1,
     targetLetter:randomLetter(),
     wolfAppearAt:2,
     wolfDefeats:0,
@@ -319,22 +334,23 @@ function tryJump(){
   playJump();
 }
 document.addEventListener('keydown',e=>{if(e.code==='Space'){e.preventDefault();tryJump();}});
+const BTN_PAD=14; // margen extra alrededor de los botones para que el toque "perdone" un poco
+function hitBtn(btn,x,y){
+  return btn && x>=btn.x-BTN_PAD && x<=btn.x+btn.w+BTN_PAD && y>=btn.y-BTN_PAD && y<=btn.y+btn.h+BTN_PAD;
+}
 canvas.addEventListener('pointerdown',(e)=>{
   if(state.transitionMode){
-    const rect=canvas.getBoundingClientRect();
-    const x=e.clientX-rect.left, y=e.clientY-rect.top;
-    const btn=state.continueBtn;
-    if(btn && x>=btn.x && x<=btn.x+btn.w && y>=btn.y && y<=btn.y+btn.h){
+    e.preventDefault();
+    const {x,y}=getCanvasPos(e);
+    if(hitBtn(state.continueBtn,x,y)){
       startLevel2();
     }
   } else if(state.continueGameMode){
-    const rect=canvas.getBoundingClientRect();
-    const x=e.clientX-rect.left, y=e.clientY-rect.top;
-    const continueBtn=state.continueBtn;
-    const gameOverBtn=state.gameOverBtn;
-    if(continueBtn && x>=continueBtn.x && x<=continueBtn.x+continueBtn.w && y>=continueBtn.y && y<=continueBtn.y+continueBtn.h){
+    e.preventDefault();
+    const {x,y}=getCanvasPos(e);
+    if(hitBtn(state.continueBtn,x,y)){
       continueGame();
-    } else if(gameOverBtn && x>=gameOverBtn.x && x<=gameOverBtn.x+gameOverBtn.w && y>=gameOverBtn.y && y<=gameOverBtn.y+gameOverBtn.h){
+    } else if(hitBtn(state.gameOverBtn,x,y)){
       endGame();
     }
   } else {
@@ -392,7 +408,7 @@ function startLevel2(){
   state.transitionMode=false;
   state.rain=true;
   state.levelBanner=110;
-  state.speed=Math.min(state.speed+1.5,18);
+  state.speed=Math.min(state.speed+0.6,MAX_SPEED);
   state.tileSpawnInterval=Math.max(state.tileSpawnInterval-6,42);
   document.getElementById('modeBadge').textContent=`⚡ Nivel ${state.speedLevel} 🌧️ (OSO)`;
   state.mode='run';
@@ -1059,7 +1075,7 @@ function update(){
             }
             if(state.score%2===0)changeTarget();
             if(state.score%SPEED_UP_EVERY===0){
-              state.speed=Math.min(state.speed+1.5,18);
+              state.speed=Math.min(state.speed+0.5,MAX_SPEED);
               state.tileSpawnInterval=Math.max(state.tileSpawnInterval-6,42);
               state.speedLevel++;
               document.getElementById('modeBadge').textContent=`⚡ Nivel ${state.speedLevel}${state.rain?' 🌧️':''}`;
