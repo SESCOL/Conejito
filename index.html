@@ -257,11 +257,13 @@ const LETTERS='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 const GROUND_RATIO=0.72;
 const TILE_W=96,TILE_H=54;
 const FRUIT_COLORS=['#e63946','#f3722c','#f9c74f','#90be6d','#9d4edd','#457b9d'];
-const JUMP_FORCE=-15,GRAVITY=0.58;
+const JUMP_FORCE=-18,GRAVITY=0.58;
+const JUMP_STEP_DISTANCE=52; // "dos pasos" de avance real al saltar
+const JUMP_SETTLE_FRAMES=18; // cuadros para reacomodarse al carril tras aterrizar
 const WIN_SCORE=5,SPEED_UP_EVERY=7;
 const WOLF_HP=3;
 const MAX_LIVES=3;
-const MAX_SPEED=5.5; // tope de velocidad: nivel intermedio, no extremo
+const MAX_SPEED=6.3; // tope de velocidad: nivel intermedio, no extremo
 const LEVEL_TARGETS=[WIN_SCORE, WIN_SCORE*2]; // puntaje para pasar cada nivel; el último gana el juego
 
 // ── ESTADO ────────────────────────────────────────────────────
@@ -273,7 +275,7 @@ function freshState(){
     running:false,
     mode:'run',       // 'run' | 'fight'
     score:0,lives:MAX_LIVES,
-    speed:1.7,speedLevel:1,
+    speed:2.1,speedLevel:1,
     targetLetter:randomLetter(),
     wolfAppearAt:2,
     wolfDefeats:0,
@@ -282,7 +284,7 @@ function freshState(){
     rain:false,
     raindrops:[],
     levelBanner:0,
-    bunny:{x:canvas.width*0.2,y:gY-64,vy:0,grounded:true,frame:0,frameTimer:0,jumping:false},
+    bunny:{x:canvas.width*0.2,y:gY-64,vy:0,grounded:true,frame:0,frameTimer:0,jumping:false,landSettleTimer:0},
     wolf:{
       x:canvas.width*0.88,y:gY-82,
       hp:WOLF_HP,hitFlash:0,shakeX:0,
@@ -295,7 +297,7 @@ function freshState(){
     tiles:[],
     particles:[],
     groundY:gY,
-    tileSpawnTimer:0,tileSpawnInterval:82,
+    tileSpawnTimer:0,tileSpawnInterval:140,
     blink:false,blinkTimer:0,
     wrongFlash:0,correctFlash:0,speedUpFlash:0,wrongStreak:0,
     tileBounceTimer:0,
@@ -408,8 +410,8 @@ function startLevel2(){
   state.transitionMode=false;
   state.rain=true;
   state.levelBanner=110;
-  state.speed=Math.min(state.speed+0.6,MAX_SPEED);
-  state.tileSpawnInterval=Math.max(state.tileSpawnInterval-6,42);
+  state.speed=Math.min(state.speed+0.7,MAX_SPEED);
+  state.tileSpawnInterval=Math.max(state.tileSpawnInterval-10,70);
   document.getElementById('modeBadge').textContent=`⚡ Nivel ${state.speedLevel} 🌧️ (OSO)`;
   state.mode='run';
   state.level2SuccessfulJumps=0; // reiniciar contador de saltos
@@ -1011,7 +1013,12 @@ function update(){
 
   // física conejito
   b.vy+=GRAVITY;b.y+=b.vy;
-  if(b.y>=floorY){b.y=floorY;b.vy=0;b.grounded=true;b.jumping=false;}
+  if(b.y>=floorY){
+    const wasJumping=b.jumping;
+    b.y=floorY;b.vy=0;b.grounded=true;b.jumping=false;
+    if(wasJumping) b.landSettleTimer=JUMP_SETTLE_FRAMES;
+  }
+  if(b.landSettleTimer>0) b.landSettleTimer--;
   b.frameTimer++;if(b.frameTimer>4){b.frame++;b.frameTimer=0;}
 
   if(state.fightBanner>0)state.fightBanner--;
@@ -1056,7 +1063,7 @@ function update(){
       const over=bR>t.x&&bL<t.x+TILE_W;
       const onT=Math.abs(bF-tTop)<12&&b.grounded;
       if(over&&!t.hit){
-        if(t.letter===state.targetLetter){if(onT){t.hit='wrong';loseLife();state.wrongFlash=18;playWrong();}}
+        if(t.letter===state.targetLetter){if(onT&&!t._jumped){t.hit='wrong';loseLife();state.wrongFlash=18;playWrong();}}
         else{if(!b.grounded&&bF<=tTop+20&&b.vy>=0){t.hit='wrong';loseLife();state.wrongFlash=18;playWrong();}}
       }
       if(t.letter===state.targetLetter&&!t.hit){
@@ -1075,8 +1082,8 @@ function update(){
             }
             if(state.score%2===0)changeTarget();
             if(state.score%SPEED_UP_EVERY===0){
-              state.speed=Math.min(state.speed+0.5,MAX_SPEED);
-              state.tileSpawnInterval=Math.max(state.tileSpawnInterval-6,42);
+              state.speed=Math.min(state.speed+0.6,MAX_SPEED);
+              state.tileSpawnInterval=Math.max(state.tileSpawnInterval-10,70);
               state.speedLevel++;
               document.getElementById('modeBadge').textContent=`⚡ Nivel ${state.speedLevel}${state.rain?' 🌧️':''}`;
               state.speedUpFlash=60;spawnParticles(b.x,b.y,'#f9c74f',18);playSpeedUp();
@@ -1131,7 +1138,7 @@ function update(){
 
       if(over && !fl.hit){
         if(fl.letter===state.targetLetter){
-          if(onT){ // pisó sin saltar → pierde vida
+          if(onT && !fl._jumped){ // pisó sin haber saltado nunca → pierde vida
             fl.hit='wrong';
             loseLife();state.wrongFlash=18;playWrong();
           }
@@ -1402,7 +1409,18 @@ function draw(){
   // conejito
   const celebrating=state.winMode;
   const eatF=state.winMode?state.winFrame:undefined;
-  drawBunny(state.bunny.x-22,state.bunny.y,state.bunny.frame,state.bunny.jumping,celebrating,eatF);
+  // "dos pasos adelante": al saltar avanza y ATERRIZA en la posición adelantada
+  // (no en el mismo lugar); luego se reacomoda suavemente a su carril antes de
+  // la siguiente fruta para no descuadrar las colisiones.
+  let jumpStepOffset=0;
+  if(state.bunny.jumping && !state.bunny.grounded){
+    const progress=Math.max(0,Math.min(1,(state.bunny.vy-JUMP_FORCE)/(-2*JUMP_FORCE)));
+    const eased=1-Math.pow(1-progress,3); // ease-out: llega casi al máximo justo al aterrizar
+    jumpStepOffset=JUMP_STEP_DISTANCE*eased;
+  } else if(state.bunny.landSettleTimer>0){
+    jumpStepOffset=JUMP_STEP_DISTANCE*(state.bunny.landSettleTimer/JUMP_SETTLE_FRAMES);
+  }
+  drawBunny(state.bunny.x-22+jumpStepOffset,state.bunny.y,state.bunny.frame,state.bunny.jumping,celebrating,eatF);
 
   // zanahoria gigante en winMode
   if(state.winMode&&state.carrotVisible){
@@ -1800,6 +1818,7 @@ function continueGame(){
   state.bunny.y=state.groundY-64;
   state.bunny.vy=0;
   state.bunny.grounded=true;
+  state.bunny.landSettleTimer=0;
 }
 
 function drawGameOverContinue(){
